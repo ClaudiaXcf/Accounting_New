@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">自动记账</string>
+    <string name="accessibility_service_label">自动记账支付识别</string>
+    <string name="notification_service_label">自动记账通知识别</string>
+    <string name="accessibility_service_description">识别支付成功页面中的金额、商户和来源 App，用于自动生成本地账单。</string>
+</resources>
+

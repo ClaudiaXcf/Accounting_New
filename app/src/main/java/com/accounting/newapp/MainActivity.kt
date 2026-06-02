@@ -62,6 +62,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -105,39 +108,119 @@ private fun AccountingApp(viewModel: AppViewModel) {
         ThemeMode.Light -> false
         ThemeMode.Dark -> true
     }
+    val colorScheme = if (darkTheme) darkColorScheme() else lightColorScheme()
+
     MaterialTheme(
-        colorScheme = if (darkTheme) darkColorScheme() else lightColorScheme(),
+        colorScheme = colorScheme,
         shapes = MaterialTheme.shapes.copy(
-            small = RoundedCornerShape(8.dp),
-            medium = RoundedCornerShape(8.dp),
-            large = RoundedCornerShape(10.dp),
+            small = RoundedCornerShape(12.dp),
+            medium = RoundedCornerShape(16.dp),
+            large = RoundedCornerShape(20.dp),
         ),
     ) {
         var destination by remember { mutableStateOf(Destination.Home) }
-        Scaffold(
-            topBar = { AppTopBar(destination.label) },
-            bottomBar = {
-                NavigationBar {
-                    Destination.entries.forEach { item ->
-                        NavigationBarItem(
-                            selected = destination == item,
-                            onClick = { destination = item },
-                            icon = { Icon(item.icon, contentDescription = item.label) },
-                            label = { Text(item.label) },
-                        )
+
+        // 背景渐变
+        val backgroundGradient = if (darkTheme) {
+            Brush.verticalGradient(
+                colors = listOf(
+                    Color(0xFF000000),
+                    Color(0xFF1C1C1E),
+                    Color(0xFF2C2C2E),
+                )
+            )
+        } else {
+            Brush.verticalGradient(
+                colors = listOf(
+                    Color(0xFFF5F5F7),
+                    Color(0xFFE8E8ED),
+                    Color(0xFFDDDDE6),
+                )
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(backgroundGradient)
+        ) {
+            Scaffold(
+                containerColor = Color.Transparent,
+                topBar = {
+                    GlassTopAppBar(
+                        title = destination.label,
+                        isDark = darkTheme,
+                    )
+                },
+                bottomBar = {
+                    GlassNavigationBar(
+                        isDark = darkTheme,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        NavigationBar(
+                            containerColor = Color.Transparent,
+                        ) {
+                            Destination.entries.forEach { item ->
+                                NavigationBarItem(
+                                    selected = destination == item,
+                                    onClick = { destination = item },
+                                    icon = { Icon(item.icon, contentDescription = item.label) },
+                                    label = { Text(item.label) },
+                                )
+                            }
+                        }
                     }
-                }
-            },
-        ) { padding ->
-            Surface(Modifier.fillMaxSize().padding(padding)) {
-                when (destination) {
-                    Destination.Home -> HomeScreen(viewModel)
-                    Destination.Bills -> BillsScreen(viewModel)
-                    Destination.Reports -> ReportsScreen(viewModel)
-                    Destination.Settings -> SettingsScreen(viewModel)
+                },
+            ) { padding ->
+                Surface(
+                    Modifier
+                        .fillMaxSize()
+                        .padding(padding)
+                        .background(Color.Transparent),
+                ) {
+                    when (destination) {
+                        Destination.Home -> HomeScreen(viewModel, darkTheme)
+                        Destination.Bills -> BillsScreen(viewModel, darkTheme)
+                        Destination.Reports -> ReportsScreen(viewModel, darkTheme)
+                        Destination.Settings -> SettingsScreen(viewModel, darkTheme)
+                    }
                 }
             }
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun GlassTopAppBar(title: String, isDark: Boolean) {
+    val backgroundColor = if (isDark) {
+        Brush.verticalGradient(
+            colors = listOf(
+                Color(0xFF1C1C1E).copy(alpha = 0.85f),
+                Color(0xFF1C1C1E).copy(alpha = 0.7f),
+            )
+        )
+    } else {
+        Brush.verticalGradient(
+            colors = listOf(
+                Color.White.copy(alpha = 0.85f),
+                Color.White.copy(alpha = 0.7f),
+            )
+        )
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(backgroundColor)
+            .padding(vertical = 16.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            title,
+            fontWeight = FontWeight.SemiBold,
+            color = if (isDark) Color.White else Color(0xFF1C1C1E)
+        )
     }
 }
 
@@ -148,43 +231,44 @@ private fun AppTopBar(title: String) {
 }
 
 @Composable
-private fun HomeScreen(viewModel: AppViewModel) {
+private fun HomeScreen(viewModel: AppViewModel, isDark: Boolean) {
     val state by viewModel.homeUiState.collectAsState()
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item {
-            SummaryPanel(
+            GlassSummaryPanel(
                 title = "今日消费",
                 value = state.todayTotalCents.formatMoney(),
                 subtitle = if (state.pendingTransactions.isEmpty()) "记录已同步" else "${state.pendingTransactions.size} 笔待确认",
+                isDark = isDark,
             )
         }
-        item { SectionTitle("最近记录") }
+        item { SectionTitle("最近记录", isDark) }
         items(state.recentTransactions) { transaction ->
-            TransactionRow(transaction = transaction, onClick = {})
+            GlassTransactionRow(transaction = transaction, onClick = {}, isDark = isDark)
         }
         if (state.recentTransactions.isEmpty()) {
-            item { EmptyState("开启权限后，支付完成会自动出现在这里。") }
+            item { EmptyState("开启权限后，支付完成会自动出现在这里。", isDark) }
         }
     }
 }
 
 @Composable
-private fun BillsScreen(viewModel: AppViewModel) {
+private fun BillsScreen(viewModel: AppViewModel, isDark: Boolean) {
     val transactions by viewModel.transactions.collectAsState()
     var editing by remember { mutableStateOf<TransactionEntity?>(null) }
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        item { SectionTitle("全部账单") }
+        item { SectionTitle("全部账单", isDark) }
         items(transactions, key = { it.id }) { transaction ->
-            TransactionRow(transaction = transaction, onClick = { editing = transaction })
+            GlassTransactionRow(transaction = transaction, onClick = { editing = transaction }, isDark = isDark)
         }
         if (transactions.isEmpty()) {
-            item { EmptyState("还没有账单。可以先完成一次支付，或等通知识别自动生成。") }
+            item { EmptyState("还没有账单。可以先完成一次支付，或等通知识别自动生成。", isDark) }
         }
     }
     editing?.let { transaction ->
@@ -205,44 +289,43 @@ private fun BillsScreen(viewModel: AppViewModel) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ReportsScreen(viewModel: AppViewModel) {
+private fun ReportsScreen(viewModel: AppViewModel, isDark: Boolean) {
     val state by viewModel.reportUiState.collectAsState()
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item {
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                ReportPeriod.entries.forEachIndexed { index, period ->
-                    SegmentedButton(
-                        selected = state.period == period,
-                        onClick = { viewModel.setPeriod(period) },
-                        shape = SegmentedButtonDefaults.itemShape(index = index, count = ReportPeriod.entries.size),
-                    ) {
-                        Text(period.label)
-                    }
-                }
-            }
+            GlassSegmentedButtons(
+                selectedPeriod = state.period,
+                onPeriodSelected = { viewModel.setPeriod(it) },
+                isDark = isDark,
+            )
         }
         item {
-            SummaryPanel(title = "${state.period.label}支出", value = state.totalCents.formatMoney(), subtitle = "按已记录账单实时统计")
+            GlassSummaryPanel(
+                title = "${state.period.label}支出",
+                value = state.totalCents.formatMoney(),
+                subtitle = "按已记录账单实时统计",
+                isDark = isDark,
+            )
         }
-        item { SectionTitle("分类占比") }
+        item { SectionTitle("分类占比", isDark) }
         items(state.categories) { total ->
-            BarRow(label = total.category, amount = total.amountCents, max = state.categories.maxOfOrNull { it.amountCents } ?: 0)
+            GlassBarRow(label = total.category, amount = total.amountCents, max = state.categories.maxOfOrNull { it.amountCents } ?: 0, isDark = isDark)
         }
-        item { SectionTitle("商户排行") }
+        item { SectionTitle("商户排行", isDark) }
         items(state.merchants) { total ->
-            BarRow(label = total.merchant, amount = total.amountCents, max = state.merchants.maxOfOrNull { it.amountCents } ?: 0)
+            GlassBarRow(label = total.merchant, amount = total.amountCents, max = state.merchants.maxOfOrNull { it.amountCents } ?: 0, isDark = isDark)
         }
         if (state.categories.isEmpty()) {
-            item { EmptyState("当前周期还没有消费记录。") }
+            item { EmptyState("当前周期还没有消费记录。", isDark) }
         }
     }
 }
 
 @Composable
-private fun SettingsScreen(viewModel: AppViewModel) {
+private fun SettingsScreen(viewModel: AppViewModel, isDark: Boolean) {
     val context = LocalContext.current
     val themeMode by viewModel.themeMode.collectAsState()
     val transactions by viewModel.transactions.collectAsState()
@@ -259,26 +342,28 @@ private fun SettingsScreen(viewModel: AppViewModel) {
         modifier = Modifier.fillMaxSize().padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        item { SectionTitle("权限") }
+        item { SectionTitle("权限", isDark) }
         item {
-            ActionCard(
+            GlassActionCard(
                 icon = Icons.Rounded.Security,
                 title = "无障碍支付识别",
                 subtitle = "开启后可识别支付完成页面。",
                 action = "去开启",
+                isDark = isDark,
                 onClick = { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
             )
         }
         item {
-            ActionCard(
+            GlassActionCard(
                 icon = Icons.Rounded.Sync,
                 title = "通知读取降级识别",
                 subtitle = "支付页面未捕获时，尝试读取支付成功通知。",
                 action = "去开启",
+                isDark = isDark,
                 onClick = { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) },
             )
         }
-        item { SectionTitle("主题") }
+        item { SectionTitle("主题", isDark) }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ThemeMode.entries.forEach { mode ->
@@ -301,14 +386,14 @@ private fun SettingsScreen(viewModel: AppViewModel) {
                 }
             }
         }
-        item { SectionTitle("导出") }
+        item { SectionTitle("导出", isDark) }
         item {
-            ActionCard(Icons.Rounded.Download, "导出 CSV", "保存账单明细，适合表格软件打开。", "导出") {
+            GlassActionCard(Icons.Rounded.Download, "导出 CSV", "保存账单明细，适合表格软件打开。", "导出", isDark) {
                 csvLauncher.launch("自动记账-${System.currentTimeMillis()}.csv")
             }
         }
         item {
-            ActionCard(Icons.Rounded.Download, "导出 Excel", "包含账单明细、分类汇总和月度汇总。", "导出") {
+            GlassActionCard(Icons.Rounded.Download, "导出 Excel", "包含账单明细、分类汇总和月度汇总。", "导出", isDark) {
                 xlsxLauncher.launch("自动记账-${System.currentTimeMillis()}.xlsx")
             }
         }
@@ -316,34 +401,115 @@ private fun SettingsScreen(viewModel: AppViewModel) {
 }
 
 @Composable
-private fun SummaryPanel(title: String, value: String, subtitle: String) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
-        Column(Modifier.fillMaxWidth().padding(22.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(title, color = MaterialTheme.colorScheme.onPrimaryContainer)
-            Text(value, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
-            Text(subtitle, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f))
+private fun GlassSummaryPanel(title: String, value: String, subtitle: String, isDark: Boolean) {
+    val backgroundBrush = if (isDark) {
+        Brush.linearGradient(
+            colors = listOf(
+                Color(0xFF0A84FF).copy(alpha = 0.25f),
+                Color(0xFF0A84FF).copy(alpha = 0.1f),
+            )
+        )
+    } else {
+        Brush.linearGradient(
+            colors = listOf(
+                Color(0xFF007AFF).copy(alpha = 0.15f),
+                Color(0xFF007AFF).copy(alpha = 0.05f),
+            )
+        )
+    }
+    val textColor = if (isDark) Color.White else Color(0xFF1C1C1E)
+    val subtitleColor = if (isDark) Color.White.copy(alpha = 0.6f) else Color(0xFF1C1C1E).copy(alpha = 0.6f)
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp)),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(backgroundBrush)
+                .padding(24.dp)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(title, color = textColor.copy(alpha = 0.8f))
+                Text(value, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, color = textColor)
+                Text(subtitle, color = subtitleColor)
+            }
         }
     }
 }
 
 @Composable
-private fun TransactionRow(transaction: TransactionEntity, onClick: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
-        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier.size(42.dp).background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(8.dp)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(transaction.category.take(1), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSecondaryContainer)
-            }
-            Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                Text(transaction.merchant, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
-                Text("${transaction.category} · ${transaction.sourceApp} · ${transaction.occurredAtMillis.formatDate()}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Column(horizontalAlignment = Alignment.End) {
-                Text(transaction.amountCents.formatMoney(), fontWeight = FontWeight.Bold)
-                if (transaction.status == ConfirmationStatus.Pending) {
-                    Text("待确认", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+private fun GlassTransactionRow(transaction: TransactionEntity, onClick: () -> Unit, isDark: Boolean) {
+    val backgroundColor = if (isDark) {
+        Brush.horizontalGradient(
+            colors = listOf(
+                Color(0xFF2C2C2E).copy(alpha = 0.6f),
+                Color(0xFF2C2C2E).copy(alpha = 0.3f),
+            )
+        )
+    } else {
+        Brush.horizontalGradient(
+            colors = listOf(
+                Color.White.copy(alpha = 0.8f),
+                Color.White.copy(alpha = 0.5f),
+            )
+        )
+    }
+    val textColor = if (isDark) Color.White else Color(0xFF1C1C1E)
+    val subtitleColor = if (isDark) Color.White.copy(alpha = 0.5f) else Color(0xFF636366)
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(backgroundColor)
+                .padding(16.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(
+                            if (isDark) Color(0xFF30D158).copy(alpha = 0.2f)
+                            else Color(0xFF34C759).copy(alpha = 0.15f)
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        transaction.category.take(1),
+                        fontWeight = FontWeight.Bold,
+                        color = if (isDark) Color(0xFF30D158) else Color(0xFF34C759)
+                    )
+                }
+                Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                    Text(
+                        transaction.merchant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        fontWeight = FontWeight.SemiBold,
+                        color = textColor
+                    )
+                    Text(
+                        "${transaction.category} · ${transaction.sourceApp} · ${transaction.occurredAtMillis.formatDate()}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = subtitleColor
+                    )
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(transaction.amountCents.formatMoney(), fontWeight = FontWeight.Bold, color = textColor)
+                    if (transaction.status == ConfirmationStatus.Pending) {
+                        Text("待确认", style = MaterialTheme.typography.labelSmall, color = Color(0xFFFF3B30))
+                    }
                 }
             }
         }
@@ -351,30 +517,113 @@ private fun TransactionRow(transaction: TransactionEntity, onClick: () -> Unit) 
 }
 
 @Composable
-private fun BarRow(label: String, amount: Long, max: Long) {
+private fun GlassBarRow(label: String, amount: Long, max: Long, isDark: Boolean) {
     val fraction = if (max <= 0) 0f else amount.toFloat() / max
+    val textColor = if (isDark) Color.White else Color(0xFF1C1C1E)
+    val trackColor = if (isDark) Color(0xFF3A3A3C) else Color(0xFFE5E5EA)
+    val progressColor = if (isDark) Color(0xFF0A84FF) else Color(0xFF007AFF)
+
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-            Text(amount.formatMoney(), fontWeight = FontWeight.SemiBold)
+            Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f), color = textColor)
+            Text(amount.formatMoney(), fontWeight = FontWeight.SemiBold, color = textColor)
         }
-        Canvas(Modifier.fillMaxWidth().height(8.dp)) {
-            drawRoundRect(Color(0xFFE5E5EA), cornerRadius = androidx.compose.ui.geometry.CornerRadius(8f, 8f))
-            drawRoundRect(Color(0xFF007AFF), size = size.copy(width = size.width * fraction), cornerRadius = androidx.compose.ui.geometry.CornerRadius(8f, 8f))
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(10.dp)
+                .clip(RoundedCornerShape(5.dp))
+        ) {
+            drawRoundRect(trackColor, cornerRadius = androidx.compose.ui.geometry.CornerRadius(5f, 5f))
+            drawRoundRect(
+                progressColor,
+                size = size.copy(width = size.width * fraction),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(5f, 5f)
+            )
         }
     }
 }
 
 @Composable
-private fun ActionCard(icon: ImageVector, title: String, subtitle: String, action: String, onClick: () -> Unit) {
-    Card {
-        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, contentDescription = null, modifier = Modifier.size(28.dp), tint = MaterialTheme.colorScheme.primary)
-            Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                Text(title, fontWeight = FontWeight.SemiBold)
-                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+private fun GlassActionCard(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    action: String,
+    isDark: Boolean,
+    onClick: () -> Unit
+) {
+    val backgroundColor = if (isDark) {
+        Brush.horizontalGradient(
+            colors = listOf(
+                Color(0xFF2C2C2E).copy(alpha = 0.6f),
+                Color(0xFF2C2C2E).copy(alpha = 0.3f),
+            )
+        )
+    } else {
+        Brush.horizontalGradient(
+            colors = listOf(
+                Color.White.copy(alpha = 0.8f),
+                Color.White.copy(alpha = 0.5f),
+            )
+        )
+    }
+    val textColor = if (isDark) Color.White else Color(0xFF1C1C1E)
+    val subtitleTextColor = if (isDark) Color.White.copy(alpha = 0.5f) else Color(0xFF636366)
+    val iconColor = if (isDark) Color(0xFF0A84FF) else Color(0xFF007AFF)
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(backgroundColor)
+                .padding(16.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(icon, contentDescription = null, modifier = Modifier.size(28.dp), tint = iconColor)
+                Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                    Text(title, fontWeight = FontWeight.SemiBold, color = textColor)
+                    Text(subtitle, style = MaterialTheme.typography.bodySmall, color = subtitleTextColor)
+                }
+                Button(onClick = onClick) { Text(action) }
             }
-            Button(onClick = onClick) { Text(action) }
+        }
+    }
+}
+
+@Composable
+private fun GlassSegmentedButtons(
+    selectedPeriod: ReportPeriod,
+    onPeriodSelected: (ReportPeriod) -> Unit,
+    isDark: Boolean
+) {
+    val selectedColor = if (isDark) Color(0xFF0A84FF) else Color(0xFF007AFF)
+    val unselectedColor = if (isDark) Color(0xFF2C2C2E) else Color.White
+    val selectedTextColor = Color.White
+    val unselectedTextColor = if (isDark) Color.White.copy(alpha = 0.7f) else Color(0xFF1C1C1E)
+
+    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+        ReportPeriod.entries.forEachIndexed { index, period ->
+            val isSelected = selectedPeriod == period
+            SegmentedButton(
+                selected = isSelected,
+                onClick = { onPeriodSelected(period) },
+                shape = SegmentedButtonDefaults.itemShape(index = index, count = ReportPeriod.entries.size),
+                colors = SegmentedButtonDefaults.colors(
+                    activeContainerColor = selectedColor,
+                    activeContentColor = selectedTextColor,
+                    inactiveContainerColor = unselectedColor,
+                    inactiveContentColor = unselectedTextColor,
+                ),
+            ) {
+                Text(period.label)
+            }
         }
     }
 }
@@ -410,14 +659,35 @@ private fun EditTransactionDialog(
 }
 
 @Composable
-private fun SectionTitle(text: String) {
-    Text(text, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+private fun SectionTitle(text: String, isDark: Boolean) {
+    val textColor = if (isDark) Color.White else Color(0xFF1C1C1E)
+    Text(
+        text,
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.SemiBold,
+        color = textColor
+    )
 }
 
 @Composable
-private fun EmptyState(text: String) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-        Text(text, modifier = Modifier.fillMaxWidth().padding(18.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+private fun EmptyState(text: String, isDark: Boolean) {
+    val backgroundColor = if (isDark) Color(0xFF2C2C2E).copy(alpha = 0.5f) else Color(0xFFE5E5EA).copy(alpha = 0.5f)
+    val textColor = if (isDark) Color.White.copy(alpha = 0.5f) else Color(0xFF636366)
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp)),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(backgroundColor)
+                .padding(18.dp)
+        ) {
+            Text(text, color = textColor)
+        }
     }
 }
 
@@ -440,20 +710,138 @@ private fun Long.formatDate(): String = DateTimeFormatter.ofPattern("MM-dd HH:mm
     .withZone(ZoneId.systemDefault())
     .format(Instant.ofEpochMilli(this))
 
+// 毛玻璃颜色方案 - 浅色模式
 private fun lightColorScheme() = androidx.compose.material3.lightColorScheme(
     primary = Color(0xFF007AFF),
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFF007AFF).copy(alpha = 0.12f),
+    onPrimaryContainer = Color(0xFF007AFF),
     secondary = Color(0xFF34C759),
+    onSecondary = Color.White,
+    secondaryContainer = Color(0xFF34C759).copy(alpha = 0.12f),
+    onSecondaryContainer = Color(0xFF34C759),
     tertiary = Color(0xFFFF9F0A),
-    background = Color(0xFFF5F5F7),
-    surface = Color.White,
-    surfaceVariant = Color(0xFFE5E5EA),
+    onTertiary = Color.White,
+    tertiaryContainer = Color(0xFFFF9F0A).copy(alpha = 0.12f),
+    onTertiaryContainer = Color(0xFFFF9F0A),
+    background = Color(0xFFF2F2F7),
+    onBackground = Color(0xFF1C1C1E),
+    surface = Color.White.copy(alpha = 0.72f),
+    onSurface = Color(0xFF1C1C1E),
+    surfaceVariant = Color.White.copy(alpha = 0.5f),
+    onSurfaceVariant = Color(0xFF636366),
+    outline = Color(0xFFD1D1D6),
+    outlineVariant = Color(0xFFE5E5EA),
 )
 
+// 毛玻璃颜色方案 - 深色模式
 private fun darkColorScheme() = androidx.compose.material3.darkColorScheme(
     primary = Color(0xFF0A84FF),
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFF0A84FF).copy(alpha = 0.2f),
+    onPrimaryContainer = Color(0xFF0A84FF),
     secondary = Color(0xFF30D158),
+    onSecondary = Color.White,
+    secondaryContainer = Color(0xFF30D158).copy(alpha = 0.2f),
+    onSecondaryContainer = Color(0xFF30D158),
     tertiary = Color(0xFFFFB340),
+    onTertiary = Color.Black,
+    tertiaryContainer = Color(0xFFFFB340).copy(alpha = 0.2f),
+    onTertiaryContainer = Color(0xFFFFB340),
     background = Color(0xFF000000),
-    surface = Color(0xFF1C1C1E),
-    surfaceVariant = Color(0xFF2C2C2E),
+    onBackground = Color.White,
+    surface = Color(0xFF1C1C1E).copy(alpha = 0.72f),
+    onSurface = Color.White,
+    surfaceVariant = Color(0xFF2C2C2E).copy(alpha = 0.5f),
+    onSurfaceVariant = Color(0xFF8E8E93),
+    outline = Color(0xFF38383A),
+    outlineVariant = Color(0xFF2C2C2E),
 )
+
+// 毛玻璃背景修饰器
+@Composable
+fun Modifier.glassBackground(isDark: Boolean): Modifier {
+    val alpha = if (isDark) 0.72f else 0.72f
+    val blurRadius = 30.dp
+    return this
+        .clip(RoundedCornerShape(16.dp))
+        .background(
+            brush = Brush.verticalGradient(
+                colors = listOf(
+                    Color.White.copy(alpha = alpha),
+                    Color.White.copy(alpha = alpha - 0.1f),
+                )
+            ),
+        )
+        .then(if (isDark) Modifier else Modifier.blur(blurRadius).background(Color.White.copy(alpha = 0.1f)).blur(0.dp))
+}
+
+// 毛玻璃卡片
+@Composable
+fun GlassCard(
+    modifier: Modifier = Modifier,
+    isDark: Boolean = false,
+    content: @Composable () -> Unit,
+) {
+    val backgroundColor = if (isDark) {
+        Brush.verticalGradient(
+            colors = listOf(
+                Color(0xFF1C1C1E).copy(alpha = 0.8f),
+                Color(0xFF2C2C2E).copy(alpha = 0.6f),
+            )
+        )
+    } else {
+        Brush.verticalGradient(
+            colors = listOf(
+                Color.White.copy(alpha = 0.85f),
+                Color.White.copy(alpha = 0.65f),
+            )
+        )
+    }
+
+    Card(
+        modifier = modifier.clip(RoundedCornerShape(16.dp)),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+    ) {
+        Box(
+            modifier = Modifier
+                .background(backgroundColor)
+                .then(if (!isDark) Modifier else Modifier)
+        ) {
+            content()
+        }
+    }
+}
+
+// 毛玻璃导航栏
+@Composable
+fun GlassNavigationBar(
+    modifier: Modifier = Modifier,
+    isDark: Boolean = false,
+    content: @Composable () -> Unit,
+) {
+    val backgroundColor = if (isDark) {
+        Brush.verticalGradient(
+            colors = listOf(
+                Color(0xFF1C1C1E).copy(alpha = 0.9f),
+                Color(0xFF1C1C1E).copy(alpha = 0.85f),
+            )
+        )
+    } else {
+        Brush.verticalGradient(
+            colors = listOf(
+                Color.White.copy(alpha = 0.92f),
+                Color.White.copy(alpha = 0.88f),
+            )
+        )
+    }
+
+    Box(modifier = modifier) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(backgroundColor)
+        )
+        content()
+    }
+}

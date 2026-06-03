@@ -14,7 +14,9 @@ class UserPreferences(private val context: Context) {
     private val themeModeKey = stringPreferencesKey("theme_mode")
 
     val themeMode: Flow<ThemeMode> = context.dataStore.data.map { preferences ->
-        preferences[themeModeKey]?.let { ThemeMode.valueOf(it) } ?: ThemeMode.System
+        preferences[themeModeKey]?.let {
+            try { ThemeMode.valueOf(it) } catch (_: Exception) { ThemeMode.System }
+        } ?: ThemeMode.System
     }
 
     suspend fun setThemeMode(mode: ThemeMode) {

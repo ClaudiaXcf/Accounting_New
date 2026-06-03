@@ -6,13 +6,22 @@ import android.view.accessibility.AccessibilityNodeInfo
 import com.accounting.newapp.AccountingApplication
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.plus
 
 class PaymentAccessibilityService : AccessibilityService() {
-    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var serviceJob: Job? = null
+    private val serviceScope: CoroutineScope get() = CoroutineScope(serviceJob!! + Dispatchers.IO)
     private var lastFingerprint: String = ""
     private var lastCapturedAt: Long = 0
+
+    override fun onServiceConnected() {
+        super.onServiceConnected()
+        serviceJob = SupervisorJob()
+    }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val packageName = event?.packageName?.toString().orEmpty()
@@ -31,6 +40,12 @@ class PaymentAccessibilityService : AccessibilityService() {
     }
 
     override fun onInterrupt() = Unit
+
+    override fun onDestroy() {
+        serviceJob?.cancel()
+        serviceJob = null
+        super.onDestroy()
+    }
 
     private fun collectText(node: AccessibilityNodeInfo, output: StringBuilder) {
         node.text?.let { output.append(it).append('\n') }

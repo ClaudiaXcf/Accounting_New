@@ -18,6 +18,7 @@ abstract class AccountingDatabase : RoomDatabase() {
     companion object {
         fun create(context: Context): AccountingDatabase {
             return Room.databaseBuilder(context, AccountingDatabase::class.java, "accounting.db")
+                .fallbackToDestructiveMigration()
                 .build()
         }
 

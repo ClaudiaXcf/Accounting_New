@@ -26,16 +26,20 @@ class PaymentAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val packageName = event?.packageName?.toString().orEmpty()
         val root = rootInActiveWindow ?: return
-        val text = buildString { collectText(root, this) }
-        val capture = PaymentTextParser.parse(text, packageName) ?: return
-        val fingerprint = "${capture.sourceApp}:${capture.amountCents}:${capture.merchant}"
-        val now = System.currentTimeMillis()
-        if (fingerprint == lastFingerprint && now - lastCapturedAt < 10_000) return
-        lastFingerprint = fingerprint
-        lastCapturedAt = now
+        try {
+            val text = buildString { collectText(root, this) }
+            val capture = PaymentTextParser.parse(text, packageName) ?: return
+            val fingerprint = "${capture.sourceApp}:${capture.amountCents}:${capture.merchant}"
+            val now = System.currentTimeMillis()
+            if (fingerprint == lastFingerprint && now - lastCapturedAt < 10_000) return
+            lastFingerprint = fingerprint
+            lastCapturedAt = now
 
-        serviceScope.launch {
-            (application as AccountingApplication).repository.addCapture(capture)
+            serviceScope.launch {
+                (application as AccountingApplication).repository.addCapture(capture)
+            }
+        } finally {
+            root.recycle()
         }
     }
 

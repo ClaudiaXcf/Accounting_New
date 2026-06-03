@@ -18,6 +18,7 @@ class AccountingRepository(private val database: AccountingDatabase) {
     fun observeMerchantTotals(startMillis: Long, endMillis: Long): Flow<List<MerchantTotal>> =
         dao.observeMerchantTotals(startMillis, endMillis)
     fun observeCategories(): Flow<List<CategoryEntity>> = dao.observeCategories()
+    fun observeTrashTransactions(): Flow<List<TransactionEntity>> = dao.observeTrashTransactions()
 
     suspend fun seedDefaultsIfNeeded() {
         if (dao.categoryCount() == 0) {
@@ -57,5 +58,20 @@ class AccountingRepository(private val database: AccountingDatabase) {
         }
     }
 
-    suspend fun deleteTransaction(transaction: TransactionEntity) = dao.deleteTransaction(transaction)
+    suspend fun softDeleteTransaction(transaction: TransactionEntity) {
+        dao.updateTransaction(transaction.copy(deletedAtMillis = System.currentTimeMillis()))
+    }
+
+    suspend fun restoreTransaction(transaction: TransactionEntity) {
+        dao.updateTransaction(transaction.copy(deletedAtMillis = 0))
+    }
+
+    suspend fun permanentlyDeleteTransaction(transaction: TransactionEntity) {
+        dao.permanentlyDeleteTransaction(transaction.id)
+    }
+
+    suspend fun purgeExpiredTrash() {
+        val cutoff = System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000
+        dao.purgeExpiredTrash(cutoff)
+    }
 }

@@ -35,6 +35,7 @@ data class TransactionEntity(
     val status: ConfirmationStatus,
     val type: TransactionType = TransactionType.Expense,
     val createdAtMillis: Long = System.currentTimeMillis(),
+    val deletedAtMillis: Long = 0,
 )
 
 @Entity(tableName = "categories")

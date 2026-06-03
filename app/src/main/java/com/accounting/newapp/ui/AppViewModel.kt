@@ -15,10 +15,10 @@ import com.accounting.newapp.report.ReportPeriod
 import com.accounting.newapp.report.ReportRanges
 import com.accounting.newapp.settings.UserPreferences
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
@@ -55,10 +55,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         emptyList(),
     )
 
+    val trashTransactions: StateFlow<List<TransactionEntity>> = repository.observeTrashTransactions().stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        emptyList(),
+    )
+
+    private val todayRange = ReportRanges.current(ReportPeriod.Day)
+
     val homeUiState: StateFlow<HomeUiState> = combine(
-        repository.observeExpenseTotal(ReportRanges.current(ReportPeriod.Day).startMillis, ReportRanges.current(ReportPeriod.Day).endMillis),
+        repository.observeExpenseTotal(todayRange.startMillis, todayRange.endMillis)
+            .catch { emit(0L) },
         transactions,
-        repository.observePendingTransactions(),
+        repository.observePendingTransactions()
+            .catch { emit(emptyList()) },
     ) { todayTotal, allTransactions, pending ->
         HomeUiState(
             todayTotalCents = todayTotal,
@@ -70,13 +80,21 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val reportUiState: StateFlow<ReportUiState> = selectedPeriod.flatMapLatest { period ->
         val range = ReportRanges.current(period)
         combine(
-            repository.observeExpenseTotal(range.startMillis, range.endMillis),
-            repository.observeCategoryTotals(range.startMillis, range.endMillis),
-            repository.observeMerchantTotals(range.startMillis, range.endMillis),
+            repository.observeExpenseTotal(range.startMillis, range.endMillis)
+                .catch { emit(0L) },
+            repository.observeCategoryTotals(range.startMillis, range.endMillis)
+                .catch { emit(emptyList()) },
+            repository.observeMerchantTotals(range.startMillis, range.endMillis)
+                .catch { emit(emptyList()) },
         ) { total, categories, merchants ->
             ReportUiState(period, total, categories, merchants)
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ReportUiState())
+    }.catch { emit(ReportUiState()) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ReportUiState())
+
+    init {
+        viewModelScope.launch { repository.purgeExpiredTrash() }
+    }
 
     fun setPeriod(period: ReportPeriod) {
         selectedPeriod.value = period
@@ -91,7 +109,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun deleteTransaction(transaction: TransactionEntity) {
-        viewModelScope.launch { repository.deleteTransaction(transaction) }
+        viewModelScope.launch { repository.softDeleteTransaction(transaction) }
+    }
+
+    fun restoreTransaction(transaction: TransactionEntity) {
+        viewModelScope.launch { repository.restoreTransaction(transaction) }
+    }
+
+    fun permanentlyDeleteTransaction(transaction: TransactionEntity) {
+        viewModelScope.launch { repository.permanentlyDeleteTransaction(transaction) }
     }
 
     class Factory(private val application: Application) : ViewModelProvider.Factory {
@@ -99,4 +125,3 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         override fun <T : ViewModel> create(modelClass: Class<T>): T = AppViewModel(application) as T
     }
 }
-

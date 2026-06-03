@@ -29,9 +29,11 @@ import androidx.compose.material.icons.automirrored.rounded.List
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Assessment
 import androidx.compose.material.icons.rounded.DarkMode
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.LightMode
+import androidx.compose.material.icons.rounded.RestoreFromTrash
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Sync
@@ -62,7 +64,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -97,6 +98,7 @@ private enum class Destination(val label: String, val icon: ImageVector) {
     Home("首页", Icons.Rounded.Home),
     Bills("账单", Icons.AutoMirrored.Rounded.List),
     Reports("报表", Icons.Rounded.Assessment),
+    Trash("回收站", Icons.Rounded.Delete),
     Settings("设置", Icons.Rounded.Settings),
 }
 
@@ -120,7 +122,6 @@ private fun AccountingApp(viewModel: AppViewModel) {
     ) {
         var destination by remember { mutableStateOf(Destination.Home) }
 
-        // 背景渐变
         val backgroundGradient = if (darkTheme) {
             Brush.verticalGradient(
                 colors = listOf(
@@ -182,6 +183,7 @@ private fun AccountingApp(viewModel: AppViewModel) {
                         Destination.Home -> HomeScreen(viewModel, darkTheme)
                         Destination.Bills -> BillsScreen(viewModel, darkTheme)
                         Destination.Reports -> ReportsScreen(viewModel, darkTheme)
+                        Destination.Trash -> TrashScreen(viewModel, darkTheme)
                         Destination.Settings -> SettingsScreen(viewModel, darkTheme)
                     }
                 }
@@ -320,6 +322,106 @@ private fun ReportsScreen(viewModel: AppViewModel, isDark: Boolean) {
         }
         if (state.categories.isEmpty()) {
             item { EmptyState("当前周期还没有消费记录。", isDark) }
+        }
+    }
+}
+
+@Composable
+private fun TrashScreen(viewModel: AppViewModel, isDark: Boolean) {
+    val trashItems by viewModel.trashTransactions.collectAsState()
+    var deleting by remember { mutableStateOf<TransactionEntity?>(null) }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        item { SectionTitle("回收站", isDark) }
+        if (trashItems.isEmpty()) {
+            item { EmptyState("回收站是空的，删除的记录会在这里保留 30 天。", isDark) }
+        }
+        items(trashItems, key = { it.id }) { transaction ->
+            TrashTransactionRow(
+                transaction = transaction,
+                isDark = isDark,
+                onRestore = { viewModel.restoreTransaction(transaction) },
+                onPermanentDelete = { deleting = transaction },
+            )
+        }
+    }
+    deleting?.let { transaction ->
+        AlertDialog(
+            onDismissRequest = { deleting = null },
+            title = { Text("永久删除") },
+            text = { Text("此操作不可恢复，确定要永久删除这条记录吗？") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.permanentlyDeleteTransaction(transaction)
+                    deleting = null
+                }) { Text("删除", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleting = null }) { Text("取消") }
+            },
+        )
+    }
+}
+
+@Composable
+private fun TrashTransactionRow(
+    transaction: TransactionEntity,
+    isDark: Boolean,
+    onRestore: () -> Unit,
+    onPermanentDelete: () -> Unit,
+) {
+    val backgroundColor = if (isDark) {
+        Brush.horizontalGradient(
+            colors = listOf(
+                Color(0xFF2C2C2E).copy(alpha = 0.6f),
+                Color(0xFF2C2C2E).copy(alpha = 0.3f),
+            )
+        )
+    } else {
+        Brush.horizontalGradient(
+            colors = listOf(
+                Color.White.copy(alpha = 0.8f),
+                Color.White.copy(alpha = 0.5f),
+            )
+        )
+    }
+    val textColor = if (isDark) Color.White else Color(0xFF1C1C1E)
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp)),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(backgroundColor)
+                .padding(16.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        transaction.merchant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        fontWeight = FontWeight.SemiBold,
+                        color = textColor
+                    )
+                    Text(
+                        "${transaction.amountCents.formatMoney()} · ${transaction.occurredAtMillis.formatDate()}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (isDark) Color.White.copy(alpha = 0.5f) else Color(0xFF636366)
+                    )
+                }
+                TextButton(onClick = onRestore) {
+                    Icon(Icons.Rounded.RestoreFromTrash, contentDescription = "恢复", modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.size(4.dp))
+                    Text("恢复")
+                }
+            }
         }
     }
 }
@@ -710,7 +812,6 @@ private fun Long.formatDate(): String = DateTimeFormatter.ofPattern("MM-dd HH:mm
     .withZone(ZoneId.systemDefault())
     .format(Instant.ofEpochMilli(this))
 
-// 毛玻璃颜色方案 - 浅色模式
 private fun lightColorScheme() = androidx.compose.material3.lightColorScheme(
     primary = Color(0xFF007AFF),
     onPrimary = Color.White,
@@ -734,7 +835,6 @@ private fun lightColorScheme() = androidx.compose.material3.lightColorScheme(
     outlineVariant = Color(0xFFE5E5EA),
 )
 
-// 毛玻璃颜色方案 - 深色模式
 private fun darkColorScheme() = androidx.compose.material3.darkColorScheme(
     primary = Color(0xFF0A84FF),
     onPrimary = Color.White,
@@ -758,62 +858,6 @@ private fun darkColorScheme() = androidx.compose.material3.darkColorScheme(
     outlineVariant = Color(0xFF2C2C2E),
 )
 
-// 毛玻璃背景修饰器
-@Composable
-fun Modifier.glassBackground(isDark: Boolean): Modifier {
-    val alpha = if (isDark) 0.72f else 0.72f
-    val blurRadius = 30.dp
-    return this
-        .clip(RoundedCornerShape(16.dp))
-        .background(
-            brush = Brush.verticalGradient(
-                colors = listOf(
-                    Color.White.copy(alpha = alpha),
-                    Color.White.copy(alpha = alpha - 0.1f),
-                )
-            ),
-        )
-        .then(if (isDark) Modifier else Modifier.blur(blurRadius).background(Color.White.copy(alpha = 0.1f)).blur(0.dp))
-}
-
-// 毛玻璃卡片
-@Composable
-fun GlassCard(
-    modifier: Modifier = Modifier,
-    isDark: Boolean = false,
-    content: @Composable () -> Unit,
-) {
-    val backgroundColor = if (isDark) {
-        Brush.verticalGradient(
-            colors = listOf(
-                Color(0xFF1C1C1E).copy(alpha = 0.8f),
-                Color(0xFF2C2C2E).copy(alpha = 0.6f),
-            )
-        )
-    } else {
-        Brush.verticalGradient(
-            colors = listOf(
-                Color.White.copy(alpha = 0.85f),
-                Color.White.copy(alpha = 0.65f),
-            )
-        )
-    }
-
-    Card(
-        modifier = modifier.clip(RoundedCornerShape(16.dp)),
-        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-    ) {
-        Box(
-            modifier = Modifier
-                .background(backgroundColor)
-                .then(if (!isDark) Modifier else Modifier)
-        ) {
-            content()
-        }
-    }
-}
-
-// 毛玻璃导航栏
 @Composable
 fun GlassNavigationBar(
     modifier: Modifier = Modifier,

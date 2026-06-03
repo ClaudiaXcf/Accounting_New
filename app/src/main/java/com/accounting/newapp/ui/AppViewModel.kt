@@ -1,3 +1,5 @@
+@file:OptIn(kotlinx.coroutines.FlowPreview::class)
+
 package com.accounting.newapp.ui
 
 import android.app.Application
@@ -20,6 +22,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -75,7 +78,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             recentTransactions = allTransactions.take(5),
             pendingTransactions = pending,
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
+    }.debounce(150).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
 
     val reportUiState: StateFlow<ReportUiState> = selectedPeriod.flatMapLatest { period ->
         val range = ReportRanges.current(period)
@@ -90,6 +93,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             ReportUiState(period, total, categories, merchants)
         }
     }.catch { emit(ReportUiState()) }
+        .debounce(150)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ReportUiState())
 
     init {

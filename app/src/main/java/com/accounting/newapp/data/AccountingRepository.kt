@@ -3,22 +3,23 @@ package com.accounting.newapp.data
 import com.accounting.newapp.capture.Categorizer
 import com.accounting.newapp.capture.PaymentCapture
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 class AccountingRepository(private val database: AccountingDatabase) {
     private val dao = database.dao()
 
-    fun observeTransactions(): Flow<List<TransactionEntity>> = dao.observeTransactions()
+    fun observeTransactions(): Flow<List<TransactionEntity>> = dao.observeTransactions().distinctUntilChanged()
     fun observeTransactionsBetween(startMillis: Long, endMillis: Long): Flow<List<TransactionEntity>> =
-        dao.observeTransactionsBetween(startMillis, endMillis)
-    fun observePendingTransactions(): Flow<List<TransactionEntity>> = dao.observePendingTransactions()
+        dao.observeTransactionsBetween(startMillis, endMillis).distinctUntilChanged()
+    fun observePendingTransactions(): Flow<List<TransactionEntity>> = dao.observePendingTransactions().distinctUntilChanged()
     fun observeExpenseTotal(startMillis: Long, endMillis: Long): Flow<Long> =
-        dao.observeExpenseTotal(startMillis, endMillis)
+        dao.observeExpenseTotal(startMillis, endMillis).distinctUntilChanged()
     fun observeCategoryTotals(startMillis: Long, endMillis: Long): Flow<List<CategoryTotal>> =
-        dao.observeCategoryTotals(startMillis, endMillis)
+        dao.observeCategoryTotals(startMillis, endMillis).distinctUntilChanged()
     fun observeMerchantTotals(startMillis: Long, endMillis: Long): Flow<List<MerchantTotal>> =
-        dao.observeMerchantTotals(startMillis, endMillis)
-    fun observeCategories(): Flow<List<CategoryEntity>> = dao.observeCategories()
-    fun observeTrashTransactions(): Flow<List<TransactionEntity>> = dao.observeTrashTransactions()
+        dao.observeMerchantTotals(startMillis, endMillis).distinctUntilChanged()
+    fun observeCategories(): Flow<List<CategoryEntity>> = dao.observeCategories().distinctUntilChanged()
+    fun observeTrashTransactions(): Flow<List<TransactionEntity>> = dao.observeTrashTransactions().distinctUntilChanged()
 
     suspend fun seedDefaultsIfNeeded() {
         if (dao.categoryCount() == 0) {

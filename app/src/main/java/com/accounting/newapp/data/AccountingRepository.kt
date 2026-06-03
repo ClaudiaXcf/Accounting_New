@@ -28,6 +28,16 @@ class AccountingRepository(private val database: AccountingDatabase) {
     }
 
     suspend fun addCapture(capture: PaymentCapture): Long {
+        // 60秒窗口内去重：防止同一笔支付被多个事件源重复插入
+        val windowMs = 60_000L
+        val count = dao.countSimilarTransactions(
+            capture.sourceApp,
+            capture.amountCents,
+            capture.occurredAtMillis - windowMs,
+            capture.occurredAtMillis + windowMs,
+        )
+        if (count > 0) return -1L
+
         val rules = dao.getRules()
         val category = Categorizer.categoryFor(capture.merchant, capture.rawText, rules)
         val status = if (capture.confidence >= 0.78f) ConfirmationStatus.Confirmed else ConfirmationStatus.Pending

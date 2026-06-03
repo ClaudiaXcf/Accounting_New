@@ -51,8 +51,11 @@ interface AccountingDao {
     @Query("SELECT * FROM merchant_rules ORDER BY updatedAtMillis DESC")
     suspend fun getRules(): List<MerchantRuleEntity>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertTransaction(transaction: TransactionEntity): Long
+
+    @Query("SELECT COUNT(*) FROM transactions WHERE sourceApp = :sourceApp AND amountCents = :amountCents AND occurredAtMillis BETWEEN :windowStart AND :windowEnd AND deletedAtMillis = 0")
+    suspend fun countSimilarTransactions(sourceApp: String, amountCents: Long, windowStart: Long, windowEnd: Long): Int
 
     @Update
     suspend fun updateTransaction(transaction: TransactionEntity)

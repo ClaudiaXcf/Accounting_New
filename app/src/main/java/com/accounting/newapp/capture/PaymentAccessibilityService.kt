@@ -15,12 +15,20 @@ import kotlinx.coroutines.plus
 class PaymentAccessibilityService : AccessibilityService() {
     private var serviceJob: Job? = null
     private val serviceScope: CoroutineScope get() = CoroutineScope(serviceJob!! + Dispatchers.IO)
-    private var lastFingerprint: String = ""
-    private var lastCapturedAt: Long = 0
+    private val recentCaptures = android.util.LruCache<String, Long>(50)
+    private val dedupWindowMs = 60_000L
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         serviceJob = SupervisorJob()
+    }
+
+    private fun isDuplicate(fingerprint: String): Boolean {
+        val now = System.currentTimeMillis()
+        val lastTime = recentCaptures[fingerprint]
+        if (lastTime != null && now - lastTime < dedupWindowMs) return true
+        recentCaptures.put(fingerprint, now)
+        return false
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -30,10 +38,7 @@ class PaymentAccessibilityService : AccessibilityService() {
             val text = buildString { collectText(root, this) }
             val capture = PaymentTextParser.parse(text, packageName) ?: return
             val fingerprint = "${capture.sourceApp}:${capture.amountCents}:${capture.merchant}"
-            val now = System.currentTimeMillis()
-            if (fingerprint == lastFingerprint && now - lastCapturedAt < 10_000) return
-            lastFingerprint = fingerprint
-            lastCapturedAt = now
+            if (isDuplicate(fingerprint)) return
 
             serviceScope.launch {
                 (application as AccountingApplication).repository.addCapture(capture)

@@ -1,6 +1,7 @@
 package com.accounting.newapp.data
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 enum class TransactionType {
@@ -20,7 +21,7 @@ enum class ThemeMode {
     Dark
 }
 
-@Entity(tableName = "transactions")
+@Entity(tableName = "transactions", indices = [Index(value = ["sourceApp", "amountCents", "occurredAtMillis"], unique = true)])
 data class TransactionEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val amountCents: Long,

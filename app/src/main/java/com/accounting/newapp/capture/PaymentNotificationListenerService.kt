@@ -14,10 +14,20 @@ import kotlinx.coroutines.plus
 class PaymentNotificationListenerService : NotificationListenerService() {
     private var serviceJob: Job? = null
     private val serviceScope: CoroutineScope get() = CoroutineScope(serviceJob!! + Dispatchers.IO)
+    private val recentCaptures = android.util.LruCache<String, Long>(50)
+    private val dedupWindowMs = 60_000L
 
     override fun onCreate() {
         super.onCreate()
         serviceJob = SupervisorJob()
+    }
+
+    private fun isDuplicate(fingerprint: String): Boolean {
+        val now = System.currentTimeMillis()
+        val lastTime = recentCaptures[fingerprint]
+        if (lastTime != null && now - lastTime < dedupWindowMs) return true
+        recentCaptures.put(fingerprint, now)
+        return false
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
@@ -28,6 +38,9 @@ class PaymentNotificationListenerService : NotificationListenerService() {
         val bigText = extras.getCharSequence("android.bigText")?.toString().orEmpty()
         val raw = listOf(title, text, bigText).joinToString("\n")
         val capture = PaymentTextParser.parse(raw, sbn.packageName, sbn.postTime) ?: return
+
+        val fingerprint = "${capture.sourceApp}:${capture.amountCents}:${capture.merchant}"
+        if (isDuplicate(fingerprint)) return
 
         serviceScope.launch {
             (application as AccountingApplication).repository.addCapture(capture)

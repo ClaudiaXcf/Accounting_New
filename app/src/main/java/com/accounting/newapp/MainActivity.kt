@@ -1,7 +1,10 @@
 package com.accounting.newapp
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
@@ -33,6 +36,7 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.LightMode
+import androidx.compose.material.icons.rounded.Message
 import androidx.compose.material.icons.rounded.RestoreFromTrash
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Settings
@@ -440,6 +444,16 @@ private fun SettingsScreen(viewModel: AppViewModel, isDark: Boolean) {
         uri?.let { context.contentResolver.openOutputStream(it)?.use { stream -> TransactionExporter.writeXlsx(transactions, stream) } }
     }
 
+    val smsPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { /* 用户授权或拒绝后无需额外操作，状态会自动刷新 */ }
+
+    val hasSmsPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        context.checkSelfPermission(Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED
+    } else {
+        true // Android 12 及以下 RECEIVE_SMS 在安装时已授予
+    }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -463,6 +477,22 @@ private fun SettingsScreen(viewModel: AppViewModel, isDark: Boolean) {
                 action = "去开启",
                 isDark = isDark,
                 onClick = { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) },
+            )
+        }
+        item {
+            val smsAction = if (hasSmsPermission) "已开启" else "去开启"
+            val smsSubtitle = if (hasSmsPermission) "银行短信将自动识别为账单。" else "开启后可从银行短信自动识别消费记录。"
+            GlassActionCard(
+                icon = Icons.Rounded.Message,
+                title = "银行短信自动记账",
+                subtitle = smsSubtitle,
+                action = smsAction,
+                isDark = isDark,
+                onClick = {
+                    if (!hasSmsPermission) {
+                        smsPermissionLauncher.launch(Manifest.permission.RECEIVE_SMS)
+                    }
+                },
             )
         }
         item { SectionTitle("主题", isDark) }

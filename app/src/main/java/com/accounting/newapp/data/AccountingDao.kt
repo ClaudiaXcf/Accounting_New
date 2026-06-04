@@ -57,6 +57,9 @@ interface AccountingDao {
     @Query("SELECT COUNT(*) FROM transactions WHERE sourceApp = :sourceApp AND amountCents = :amountCents AND occurredAtMillis BETWEEN :windowStart AND :windowEnd AND deletedAtMillis = 0")
     suspend fun countSimilarTransactions(sourceApp: String, amountCents: Long, windowStart: Long, windowEnd: Long): Int
 
+    @Query("SELECT * FROM transactions WHERE amountCents = :amountCents AND occurredAtMillis BETWEEN :windowStart AND :windowEnd AND deletedAtMillis = 0 LIMIT 1")
+    suspend fun findSimilarTransaction(amountCents: Long, windowStart: Long, windowEnd: Long): TransactionEntity?
+
     @Update
     suspend fun updateTransaction(transaction: TransactionEntity)
 

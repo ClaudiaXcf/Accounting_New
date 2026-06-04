@@ -28,16 +28,39 @@ class AccountingRepository(private val database: AccountingDatabase) {
     }
 
     suspend fun addCapture(capture: PaymentCapture): Long {
-        // 60秒窗口内去重：防止同一笔支付被多个事件源重复插入
         val windowMs = 60_000L
-        val count = dao.countSimilarTransactions(
+        val windowStart = capture.occurredAtMillis - windowMs
+        val windowEnd = capture.occurredAtMillis + windowMs
+
+        // 1. 同源去重：同一 app 的同一笔交易
+        val sameSourceCount = dao.countSimilarTransactions(
             capture.sourceApp,
             capture.amountCents,
-            capture.occurredAtMillis - windowMs,
-            capture.occurredAtMillis + windowMs,
+            windowStart,
+            windowEnd,
         )
-        if (count > 0) return -1L
+        if (sameSourceCount > 0) return -1L
 
+        // 2. 跨源去重：不同 app 捕获的同一笔交易（如微信通知 + 银行短信）
+        //    找到后在同一条记录上合并来源（sourceApp 变为 "微信支付,招商银行"）
+        val existing = dao.findSimilarTransaction(capture.amountCents, windowStart, windowEnd)
+        if (existing != null) {
+            if (!existing.sourceApp.contains(capture.sourceApp)) {
+                val mergedSourceApp = "${existing.sourceApp},${capture.sourceApp}"
+                val mergedNote = if (existing.note.isNotBlank() && capture.rawText.isNotBlank()) {
+                    "${existing.note}\n[${capture.sourceApp}] ${capture.rawText.take(200)}"
+                } else {
+                    capture.rawText.take(500)
+                }
+                dao.updateTransaction(existing.copy(
+                    sourceApp = mergedSourceApp,
+                    note = mergedNote,
+                ))
+            }
+            return -1L
+        }
+
+        // 3. 新交易，正常插入
         val rules = dao.getRules()
         val category = Categorizer.categoryFor(capture.merchant, capture.rawText, rules)
         val status = if (capture.confidence >= 0.78f) ConfirmationStatus.Confirmed else ConfirmationStatus.Pending
